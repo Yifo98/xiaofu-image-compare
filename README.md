@@ -11,8 +11,8 @@ A lightweight ComfyUI custom node for comparing multiple images in one preview n
 - Add more `image_XX` input slots with `Add`.
 - Remove unused empty image input slots with `Clean`.
 - No extra Python dependencies.
-- Compatible with ComfyUI classic nodes and Nodes 2.0.
-- Resizable preview area in Nodes 2.0.
+- Currently designed for ComfyUI classic nodes.
+- Nodes 2.0 is not supported yet.
 
 ## Installation
 
@@ -24,6 +24,8 @@ git clone https://github.com/Yifo98/xiaofu-image-compare.git
 ```
 
 Then restart ComfyUI.
+
+This node currently works best with ComfyUI's classic node interface. Disable Nodes 2.0 before using it.
 
 You should see this startup line:
 
@@ -42,6 +44,7 @@ You should see this startup line:
 
 ## Notes
 
+- Nodes 2.0 is currently not supported. The custom canvas UI may render or interact incorrectly when Nodes 2.0 is enabled.
 - `Add` only adds another image input slot. It does not upload images.
 - Image upload is handled by ComfyUI's built-in `Load Image` node.
 - The plugin is designed to run inside whatever Python environment ComfyUI already uses, including Conda, venv, or portable builds.
@@ -57,7 +60,7 @@ Tested locally with:
 
 It should also work in other recent ComfyUI versions that support classic custom nodes with `NODE_CLASS_MAPPINGS` and frontend extensions through `WEB_DIRECTORY`.
 
-The node returns its preview images through a custom UI payload key instead of ComfyUI's built-in `images` key, so Nodes 2.0 does not render an extra native image gallery under the custom comparison view.
+Nodes 2.0 support is planned, but not enabled in the current stable version.
 
 ## License
 

@@ -31,6 +31,18 @@ def image_slot_sort_key(item):
     return (1, key)
 
 
+def image_tensor_size(image_tensor):
+    shape = getattr(image_tensor, "shape", None)
+    if shape is None:
+        return None, None
+
+    if len(shape) >= 4:
+        return int(shape[2]), int(shape[1])
+    if len(shape) >= 3:
+        return int(shape[1]), int(shape[0])
+    return None, None
+
+
 class XiaoFuMultiImageCompare(PreviewImage):
     DESCRIPTION = "Preview and compare multiple images with selectable left/right slots."
     CATEGORY = "XiaoFu/Image"
@@ -72,6 +84,7 @@ class XiaoFuMultiImageCompare(PreviewImage):
             except TypeError:
                 pass
 
+            image_width, image_height = image_tensor_size(image_tensor)
             saved = self.save_images(
                 image_tensor,
                 filename_prefix,
@@ -84,6 +97,9 @@ class XiaoFuMultiImageCompare(PreviewImage):
                 item["source_slot"] = slot_name
                 item["batch_index"] = batch_index
                 item["id"] = f"{slot_name}:{batch_index}"
+                if image_width and image_height:
+                    item["width"] = image_width
+                    item["height"] = image_height
                 item["name"] = (
                     slot_name
                     if len(saved) == 1

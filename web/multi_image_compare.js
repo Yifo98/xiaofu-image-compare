@@ -5,10 +5,17 @@ const NODE_ID = "XiaoFuMultiImageCompare";
 const WIDGET_NAME = "xiaofu_multi_image_compare";
 const SLOT_PREFIX = "image_";
 const MIN_INPUTS = 2;
-const DEFAULT_NODE_WIDTH = 420;
-const DEFAULT_NODE_HEIGHT = 380;
-const DEFAULT_WIDGET_HEIGHT = 300;
-const WIDGET_TOP_ESTIMATE = 120;
+const DEFAULT_NODE_WIDTH = 640;
+const DEFAULT_NODE_HEIGHT = 620;
+const RUNAWAY_NODE_HEIGHT = 980;
+const MIN_PREVIEW_HEIGHT = 260;
+const MAX_PREVIEW_HEIGHT = 480;
+const TOOLBAR_HEIGHT = 26;
+const LABEL_ROW_HEIGHT = 24;
+const LABEL_GAP = 6;
+const SELECTOR_ROW_HEIGHT = 24;
+const WIDGET_PADDING = 10;
+const WIDGET_BOTTOM_PADDING = 12;
 
 function slotName(index) {
   return `${SLOT_PREFIX}${String(index + 1).padStart(2, "0")}`;
@@ -31,6 +38,48 @@ function imageDataToUrl(data) {
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function isPoint(value) {
+  return (
+    Array.isArray(value) &&
+    value.length >= 2 &&
+    Number.isFinite(Number(value[0])) &&
+    Number.isFinite(Number(value[1]))
+  );
+}
+
+function pointFromValue(value) {
+  if (isPoint(value)) {
+    return [Number(value[0]), Number(value[1])];
+  }
+
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  for (const [xKey, yKey] of [
+    ["x", "y"],
+    ["canvasX", "canvasY"],
+    ["localX", "localY"],
+    ["offsetX", "offsetY"],
+  ]) {
+    if (Number.isFinite(Number(value[xKey])) && Number.isFinite(Number(value[yKey]))) {
+      return [Number(value[xKey]), Number(value[yKey])];
+    }
+  }
+
+  return null;
+}
+
+function findPoint(values) {
+  for (const value of values) {
+    const point = pointFromValue(value);
+    if (point) {
+      return point;
+    }
+  }
+  return null;
 }
 
 function fitText(ctx, text, maxWidth) {
@@ -177,7 +226,7 @@ class MultiImageCompareWidget {
     this.ensureSelection();
     this.ensureLoadedImages();
     this.updateNodeImages();
-    this.requestDraw();
+    this.requestDraw(true);
   }
 
   prepareImageRecord(image, index) {
@@ -217,7 +266,7 @@ class MultiImageCompareWidget {
         const htmlImage = new Image();
         htmlImage.onload = () => {
           this.updateNodeImages();
-          this.requestDraw();
+          this.requestDraw(true);
         };
         htmlImage.src = image.url;
         image.img = htmlImage;
@@ -286,8 +335,9 @@ class MultiImageCompareWidget {
   updateNodeImages() {
     const left = this.leftImage?.img || null;
     const right = this.rightImage?.img || null;
-    this.node.imgs = [left || right, right || left].filter(Boolean);
-    this.node.imageIndex = this.node.imageIndex || 0;
+    this.node.xiaofuCompareImages = [left || right, right || left].filter(Boolean);
+    this.node.imgs = [];
+    this.node.imageIndex = 0;
   }
 
   updatePointer(pos) {
@@ -309,14 +359,38 @@ class MultiImageCompareWidget {
     }
   }
 
+  getPosCandidates(pos) {
+    const point = pointFromValue(pos);
+    if (!point) {
+      return [];
+    }
+
+    const x = point[0];
+    const y = point[1];
+    const nodeX = Number(this.node?.pos?.[0] || 0);
+    const nodeY = Number(this.node?.pos?.[1] || 0);
+    const candidates = [
+      [x, y],
+      [x, y + this.last_y],
+      [x - nodeX, y - nodeY],
+      [x - nodeX, y - nodeY + this.last_y],
+    ];
+    const seen = new Set();
+    return candidates.filter((candidate) => {
+      const key = `${candidate[0].toFixed(3)},${candidate[1].toFixed(3)}`;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+  }
+
   normalizePos(pos, bounds) {
-    if (!pos) {
+    const candidates = this.getPosCandidates(pos);
+    if (!candidates.length) {
       return null;
     }
-    const candidates = [
-      [pos[0], pos[1]],
-      [pos[0], pos[1] + this.last_y],
-    ];
 
     if (!bounds) {
       return candidates[0];
@@ -353,14 +427,15 @@ class MultiImageCompareWidget {
     const area = this.findHitArea(pos);
     if (area) {
       area.action();
+      this.requestDraw();
       return true;
     }
     this.updatePointer(pos);
     return false;
   }
 
-  requestDraw() {
-    this.node.setDirtyCanvas?.(true, false);
+  requestDraw(layout = false) {
+    this.node.setDirtyCanvas?.(true, layout);
   }
 
   serializeValue() {
@@ -377,13 +452,83 @@ class MultiImageCompareWidget {
     };
   }
 
-  getDesiredWidgetHeight() {
-    const nodeHeight = this.node?.size?.[1] || DEFAULT_NODE_HEIGHT;
-    return Math.max(DEFAULT_WIDGET_HEIGHT, nodeHeight - WIDGET_TOP_ESTIMATE);
+  getImageAspect(image) {
+    const width = Number(image?.img?.naturalWidth || image?.width || 0);
+    const height = Number(image?.img?.naturalHeight || image?.height || 0);
+    if (width > 0 && height > 0) {
+      return width / height;
+    }
+    return null;
+  }
+
+  getCompareAspect() {
+    const aspects = [this.getImageAspect(this.leftImage), this.getImageAspect(this.rightImage)].filter(
+      (aspect) => Number.isFinite(aspect) && aspect > 0,
+    );
+    if (!aspects.length) {
+      return 4 / 3;
+    }
+    return aspects.reduce((total, aspect) => total + aspect, 0) / aspects.length;
+  }
+
+  getPreviewHeight(width) {
+    const availableWidth = Math.max(1, (width || DEFAULT_NODE_WIDTH) - WIDGET_PADDING * 2);
+    const aspect = this.getCompareAspect();
+    return clamp(availableWidth / aspect, MIN_PREVIEW_HEIGHT, MAX_PREVIEW_HEIGHT);
+  }
+
+  getEstimatedSelectorItemWidth(image) {
+    const labelWidth = Math.min(110, (image?.name?.length || 8) * 7 + 14);
+    return 22 + 22 + 22 + labelWidth + 10;
+  }
+
+  estimateSelectorHeight(width, rowHeight = SELECTOR_ROW_HEIGHT) {
+    if (!this._value.images.length) {
+      return rowHeight;
+    }
+
+    const availableWidth = Math.max(1, (width || DEFAULT_NODE_WIDTH) - WIDGET_PADDING * 2);
+    let x = 0;
+    let rows = 1;
+    for (const image of this._value.images) {
+      const itemWidth = this.getEstimatedSelectorItemWidth(image);
+      if (x > 0 && x + itemWidth > availableWidth) {
+        rows += 1;
+        x = 0;
+      }
+      x += itemWidth + 6;
+    }
+    return rows * rowHeight;
+  }
+
+  getDesiredWidgetHeight(width) {
+    return (
+      TOOLBAR_HEIGHT +
+      6 +
+      Math.max(MIN_PREVIEW_HEIGHT, this.getPreviewHeight(width)) +
+      LABEL_GAP +
+      LABEL_ROW_HEIGHT +
+      8 +
+      this.estimateSelectorHeight(width) +
+      WIDGET_PADDING
+    );
   }
 
   computeSize(width) {
-    return [width, this.getDesiredWidgetHeight()];
+    return [width, this.getDesiredWidgetHeight(width)];
+  }
+
+  syncNodeHeight(width, y) {
+    if (!this.node?.size) {
+      return;
+    }
+
+    const desiredHeight = y + this.getDesiredWidgetHeight(width) + WIDGET_BOTTOM_PADDING;
+    const currentHeight = this.node.size[1] || 0;
+    if (currentHeight < desiredHeight - 1 || currentHeight > RUNAWAY_NODE_HEIGHT) {
+      this.node.size[1] = desiredHeight;
+      this.requestDraw(true);
+    }
   }
 
   draw(ctx, node, width, y, height) {
@@ -391,24 +536,31 @@ class MultiImageCompareWidget {
     this.last_y = y;
     this.hitAreas = [];
 
-    const widgetHeight = Math.max(height || 0, this.getDesiredWidgetHeight());
-    const rowHeight = 24;
-    const padding = 10;
+    const widgetHeight = this.getDesiredWidgetHeight(width);
+    this.syncNodeHeight(width, y);
+    const rowHeight = SELECTOR_ROW_HEIGHT;
+    const padding = WIDGET_PADDING;
     const selectorHeight = this.computeSelectorHeight(ctx, width - padding * 2, rowHeight);
-    const toolbarHeight = 26;
+    const toolbarHeight = TOOLBAR_HEIGHT;
     const previewY = y + toolbarHeight + 6;
-    const previewHeight = Math.max(120, widgetHeight - toolbarHeight - selectorHeight - padding);
+    const previewHeight = Math.min(
+      widgetHeight - toolbarHeight - selectorHeight - LABEL_GAP - LABEL_ROW_HEIGHT - padding - 14,
+      this.getPreviewHeight(width),
+    );
     const previewBounds = {
       x: padding,
       y: previewY,
       w: width - padding * 2,
       h: previewHeight,
     };
-    this.previewBounds = previewBounds;
+    const compareBounds = this.getAspectBounds(previewBounds);
+    this.previewBounds = compareBounds;
 
     this.drawToolbar(ctx, width, y, toolbarHeight);
-    this.drawPreview(ctx, previewBounds);
-    this.drawSelector(ctx, width, previewY + previewHeight + 8, rowHeight);
+    this.drawPreview(ctx, previewBounds, compareBounds);
+    const labelY = previewY + previewHeight + LABEL_GAP;
+    this.drawPreviewLabels(ctx, compareBounds, labelY, this.leftImage, this.rightImage);
+    this.drawSelector(ctx, width, labelY + LABEL_ROW_HEIGHT + 8, rowHeight);
   }
 
   computeSelectorHeight(ctx, availableWidth, rowHeight) {
@@ -466,29 +618,51 @@ class MultiImageCompareWidget {
     ctx.restore();
 
     if (!disabled) {
-      this.hitAreas.push({ x, y, w: width, h: height, action });
+      this.hitAreas.push({ x: x - 2, y: y - 2, w: width + 4, h: height + 4, action });
     }
   }
 
-  drawPreview(ctx, bounds) {
+  getAspectBounds(bounds) {
+    const aspect = this.getCompareAspect();
+    const areaAspect = bounds.w / bounds.h;
+    let width = bounds.w;
+    let height = bounds.h;
+
+    if (aspect > areaAspect) {
+      height = bounds.w / aspect;
+    } else {
+      width = bounds.h * aspect;
+    }
+
+    return {
+      x: bounds.x + (bounds.w - width) / 2,
+      y: bounds.y + (bounds.h - height) / 2,
+      w: width,
+      h: height,
+    };
+  }
+
+  drawPreview(ctx, bounds, imageBounds) {
     ctx.save();
-    ctx.fillStyle = "#151515";
-    ctx.fillRect(bounds.x, bounds.y, bounds.w, bounds.h);
+    ctx.fillStyle = "#181818";
+    ctx.fillRect(imageBounds.x, imageBounds.y, imageBounds.w, imageBounds.h);
+    ctx.strokeStyle = "rgba(255,255,255,0.16)";
+    ctx.strokeRect(imageBounds.x, imageBounds.y, imageBounds.w, imageBounds.h);
 
     const left = this.leftImage;
     const right = this.rightImage;
-    const split = bounds.x + bounds.w * this._value.splitX;
+    const split = imageBounds.x + imageBounds.w * this._value.splitX;
 
     if (left?.img?.naturalWidth && left?.img?.naturalHeight) {
-      this.drawContainedImage(ctx, left.img, bounds);
+      this.drawContainedImage(ctx, left.img, imageBounds);
     }
 
     if (right?.img?.naturalWidth && right?.img?.naturalHeight && right.id !== left?.id) {
       ctx.save();
       ctx.beginPath();
-      ctx.rect(split, bounds.y, bounds.x + bounds.w - split, bounds.h);
+      ctx.rect(split, imageBounds.y, imageBounds.x + imageBounds.w - split, imageBounds.h);
       ctx.clip();
-      this.drawContainedImage(ctx, right.img, bounds);
+      this.drawContainedImage(ctx, right.img, imageBounds);
       ctx.restore();
     }
 
@@ -497,11 +671,10 @@ class MultiImageCompareWidget {
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.font = "13px Arial";
-      ctx.fillText("No images", bounds.x + bounds.w / 2, bounds.y + bounds.h / 2);
+      ctx.fillText("No images", imageBounds.x + imageBounds.w / 2, imageBounds.y + imageBounds.h / 2);
     }
 
-    this.drawSplitLine(ctx, split, bounds);
-    this.drawPreviewLabels(ctx, bounds, left, right);
+    this.drawSplitLine(ctx, split, imageBounds);
     ctx.restore();
   }
 
@@ -530,49 +703,63 @@ class MultiImageCompareWidget {
 
   drawSplitLine(ctx, split, bounds) {
     ctx.save();
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = "rgba(0,0,0,0.7)";
+    const x = Math.round(split) + 0.5;
+    const centerY = bounds.y + bounds.h / 2;
+
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(255,255,255,0.78)";
     ctx.beginPath();
-    ctx.moveTo(split + 1, bounds.y);
-    ctx.lineTo(split + 1, bounds.y + bounds.h);
+    ctx.moveTo(x, bounds.y);
+    ctx.lineTo(x, bounds.y + bounds.h);
     ctx.stroke();
 
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = "#ffffff";
+    ctx.fillStyle = "rgba(245,245,245,0.76)";
+    ctx.strokeStyle = "rgba(90,90,90,0.72)";
+    ctx.lineWidth = 1.25;
     ctx.beginPath();
-    ctx.moveTo(split, bounds.y);
-    ctx.lineTo(split, bounds.y + bounds.h);
+    ctx.arc(x, centerY, 5.5, 0, Math.PI * 2);
+    ctx.fill();
     ctx.stroke();
     ctx.restore();
   }
 
-  drawPreviewLabels(ctx, bounds, left, right) {
+  drawPreviewLabels(ctx, bounds, y, left, right) {
     ctx.save();
     ctx.font = "12px Arial";
-    ctx.textBaseline = "bottom";
-    this.drawOverlayLabel(ctx, `L: ${left?.name || "-"}`, bounds.x + 8, bounds.y + bounds.h - 8, "left");
-    this.drawOverlayLabel(
+    ctx.textBaseline = "middle";
+    const labelY = y + LABEL_ROW_HEIGHT / 2;
+    this.drawOutsideLabel(ctx, `L: ${left?.name || "-"}`, bounds.x, labelY, "left");
+    this.drawOutsideLabel(
       ctx,
       `R: ${right?.name || "-"}`,
-      bounds.x + bounds.w - 8,
-      bounds.y + bounds.h - 8,
+      bounds.x + bounds.w,
+      labelY,
       "right",
     );
     ctx.restore();
   }
 
-  drawOverlayLabel(ctx, text, x, y, align) {
+  drawOutsideLabel(ctx, text, x, y, align) {
     const maxWidth = Math.max(80, this.previewBounds.w * 0.42);
     const fitted = fitText(ctx, text, maxWidth);
     const textWidth = ctx.measureText(fitted).width;
-    const boxWidth = textWidth + 12;
+    const boxWidth = textWidth + 16;
+    const boxHeight = 20;
     const boxX = align === "right" ? x - boxWidth : x;
+    const boxY = y - boxHeight / 2;
 
-    ctx.fillStyle = "rgba(0,0,0,0.58)";
-    ctx.fillRect(boxX, y - 18, boxWidth, 20);
+    ctx.fillStyle = "rgba(45,45,45,0.92)";
+    ctx.strokeStyle = "rgba(255,255,255,0.18)";
+    ctx.beginPath();
+    ctx.roundRect?.(boxX, boxY, boxWidth, boxHeight, 5);
+    if (!ctx.roundRect) {
+      ctx.rect(boxX, boxY, boxWidth, boxHeight);
+    }
+    ctx.fill();
+    ctx.stroke();
     ctx.fillStyle = "#f7f7f7";
     ctx.textAlign = align;
-    ctx.fillText(fitted, x, y - 3);
+    ctx.fillText(fitted, align === "right" ? x - 8 : x + 8, y + 0.5);
   }
 
   getSelectorItemWidth(ctx, image) {
@@ -659,17 +846,19 @@ class MultiImageCompareWidget {
     ctx.restore();
 
     if (!disabled) {
-      this.hitAreas.push({ x, y, w: size, h: size, action });
+      this.hitAreas.push({ x: x - 2, y: y - 2, w: size + 4, h: size + 4, action });
     }
   }
 
   mouse(event, pos) {
-    if (event.type === "pointerdown") {
-      return this.handlePointerDown(pos);
+    const pointerPos = findPoint([pos, event]);
+    const eventType = event?.type;
+    if (eventType === "pointerdown" || eventType === "mousedown" || eventType === "click") {
+      return this.handlePointerDown(pointerPos);
     }
 
-    if (event.type === "pointermove") {
-      this.updatePointer(pos);
+    if (eventType === "pointermove" || eventType === "mousemove") {
+      this.updatePointer(pointerPos);
       return true;
     }
 
@@ -684,8 +873,8 @@ function installWidget(node) {
 
   node.serialize_widgets = true;
   node.properties = node.properties || {};
-  node.imageIndex = node.imageIndex || 0;
-  node.imgs = node.imgs || [];
+  node.imageIndex = 0;
+  node.imgs = [];
 
   const widget = new MultiImageCompareWidget(node);
   node[WIDGET_NAME] = widget;
@@ -697,10 +886,17 @@ function installWidget(node) {
     node.widgets.push(widget);
   }
 
-  if (!node.size || node.size[0] < DEFAULT_NODE_WIDTH || node.size[1] < DEFAULT_NODE_HEIGHT) {
+  const currentWidth = node.size?.[0] || 0;
+  const currentHeight = node.size?.[1] || 0;
+  if (
+    !node.size ||
+    currentWidth < DEFAULT_NODE_WIDTH ||
+    currentHeight < DEFAULT_NODE_HEIGHT ||
+    currentHeight > RUNAWAY_NODE_HEIGHT
+  ) {
     node.size = [
-      Math.max(node.size?.[0] || 0, DEFAULT_NODE_WIDTH),
-      Math.max(node.size?.[1] || 0, DEFAULT_NODE_HEIGHT),
+      Math.max(currentWidth, DEFAULT_NODE_WIDTH),
+      currentHeight > RUNAWAY_NODE_HEIGHT ? DEFAULT_NODE_HEIGHT : Math.max(currentHeight, DEFAULT_NODE_HEIGHT),
     ];
   }
 
@@ -747,15 +943,17 @@ app.registerExtension({
 
     proto.onMouseMove = function (event, pos) {
       const result = originalOnMouseMove?.apply(this, arguments);
-      if (pos) {
-        this[WIDGET_NAME]?.updatePointer(pos);
+      const pointerPos = findPoint([pos, event]);
+      if (pointerPos) {
+        this[WIDGET_NAME]?.updatePointer(pointerPos);
       }
       return result;
     };
 
     proto.onMouseDown = function (event, pos) {
-      if (pos) {
-        const handled = this[WIDGET_NAME]?.handlePointerDown(pos);
+      const pointerPos = findPoint([pos, event]);
+      if (pointerPos) {
+        const handled = this[WIDGET_NAME]?.handlePointerDown(pointerPos);
         if (handled) {
           return true;
         }
