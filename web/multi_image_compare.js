@@ -6,16 +6,17 @@ const WIDGET_NAME = "xiaofu_multi_image_compare";
 const SLOT_PREFIX = "image_";
 const MIN_INPUTS = 2;
 const DEFAULT_NODE_WIDTH = 640;
-const DEFAULT_NODE_HEIGHT = 620;
-const RUNAWAY_NODE_HEIGHT = 980;
+const DEFAULT_NODE_HEIGHT = 760;
+const RUNAWAY_NODE_HEIGHT = 1800;
 const MIN_PREVIEW_HEIGHT = 260;
-const MAX_PREVIEW_HEIGHT = 480;
+const MAX_PREVIEW_HEIGHT = 1200;
 const TOOLBAR_HEIGHT = 26;
 const LABEL_ROW_HEIGHT = 24;
 const LABEL_GAP = 6;
 const SELECTOR_ROW_HEIGHT = 24;
 const WIDGET_PADDING = 10;
 const WIDGET_BOTTOM_PADDING = 12;
+const EDGE_SNAP_PX = 10;
 
 function slotName(index) {
   return `${SLOT_PREFIX}${String(index + 1).padStart(2, "0")}`;
@@ -38,6 +39,18 @@ function imageDataToUrl(data) {
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function splitFromPoint(x, bounds) {
+  const snap = Math.min(0.08, EDGE_SNAP_PX / Math.max(1, bounds.w));
+  const value = (x - bounds.x) / bounds.w;
+  if (value <= snap) {
+    return 0;
+  }
+  if (value >= 1 - snap) {
+    return 1;
+  }
+  return clamp(value, 0, 1);
 }
 
 function isPoint(value) {
@@ -346,14 +359,15 @@ class MultiImageCompareWidget {
       return;
     }
     const bounds = this.previewBounds;
+    const pad = EDGE_SNAP_PX;
     const inside =
-      normalized[0] >= bounds.x &&
-      normalized[0] <= bounds.x + bounds.w &&
-      normalized[1] >= bounds.y &&
-      normalized[1] <= bounds.y + bounds.h;
+      normalized[0] >= bounds.x - pad &&
+      normalized[0] <= bounds.x + bounds.w + pad &&
+      normalized[1] >= bounds.y - pad &&
+      normalized[1] <= bounds.y + bounds.h + pad;
     this.pointerOverPreview = inside;
     if (inside) {
-      this._value.splitX = clamp((normalized[0] - bounds.x) / bounds.w, 0, 1);
+      this._value.splitX = splitFromPoint(normalized[0], bounds);
       this.node.imageIndex = this._value.splitX > 0.5 ? 1 : 0;
       this.requestDraw();
     }
@@ -361,20 +375,28 @@ class MultiImageCompareWidget {
 
   getPosCandidates(pos) {
     const point = pointFromValue(pos);
+    const candidates = [];
+    const nodeX = Number(this.node?.pos?.[0] || 0);
+    const nodeY = Number(this.node?.pos?.[1] || 0);
+    const graphMouse = app.canvas?.graph_mouse;
+
+    if (isPoint(graphMouse)) {
+      candidates.push([Number(graphMouse[0]) - nodeX, Number(graphMouse[1]) - nodeY]);
+    }
+
     if (!point) {
-      return [];
+      return candidates;
     }
 
     const x = point[0];
     const y = point[1];
-    const nodeX = Number(this.node?.pos?.[0] || 0);
-    const nodeY = Number(this.node?.pos?.[1] || 0);
-    const candidates = [
+    candidates.push(
       [x, y],
       [x, y + this.last_y],
       [x - nodeX, y - nodeY],
       [x - nodeX, y - nodeY + this.last_y],
-    ];
+    );
+
     const seen = new Set();
     return candidates.filter((candidate) => {
       const key = `${candidate[0].toFixed(3)},${candidate[1].toFixed(3)}`;
@@ -386,7 +408,7 @@ class MultiImageCompareWidget {
     });
   }
 
-  normalizePos(pos, bounds) {
+  getInsideCandidate(pos, bounds) {
     const candidates = this.getPosCandidates(pos);
     if (!candidates.length) {
       return null;
@@ -396,15 +418,27 @@ class MultiImageCompareWidget {
       return candidates[0];
     }
 
-    return (
-      candidates.find(
-        (candidate) =>
-          candidate[0] >= bounds.x &&
-          candidate[0] <= bounds.x + bounds.w &&
-          candidate[1] >= bounds.y &&
-          candidate[1] <= bounds.y + bounds.h,
-      ) || candidates[0]
+    const pad = EDGE_SNAP_PX;
+    return candidates.find(
+      (candidate) =>
+        candidate[0] >= bounds.x - pad &&
+        candidate[0] <= bounds.x + bounds.w + pad &&
+        candidate[1] >= bounds.y - pad &&
+        candidate[1] <= bounds.y + bounds.h + pad,
     );
+  }
+
+  normalizePos(pos, bounds) {
+    const candidate = this.getInsideCandidate(pos, bounds);
+    if (candidate) {
+      return candidate;
+    }
+
+    const candidates = this.getPosCandidates(pos);
+    if (!candidates.length) {
+      return null;
+    }
+    return candidates[0];
   }
 
   findHitArea(pos) {
