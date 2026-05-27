@@ -729,7 +729,7 @@ app.registerExtension({
 
     proto.onExecuted = function (output) {
       const widget = installWidget(this);
-      widget.setImages(output?.images || []);
+      widget.setImages(output?.xiaofu_images || output?.images || []);
       return undefined;
     };
 

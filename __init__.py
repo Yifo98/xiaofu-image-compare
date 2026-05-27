@@ -91,7 +91,7 @@ class XiaoFuMultiImageCompare(PreviewImage):
                 )
                 images.append(item)
 
-        return {"ui": {"images": images}}
+        return {"ui": {"xiaofu_images": images}}
 
 
 NODE_CLASS_MAPPINGS = {

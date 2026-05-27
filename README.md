@@ -11,6 +11,7 @@ A lightweight ComfyUI custom node for comparing multiple images in one preview n
 - Add more `image_XX` input slots with `Add`.
 - Remove unused empty image input slots with `Clean`.
 - No extra Python dependencies.
+- Compatible with ComfyUI classic nodes and Nodes 2.0.
 
 ## Installation
 
@@ -54,6 +55,8 @@ Tested locally with:
 - Python `3.13`
 
 It should also work in other recent ComfyUI versions that support classic custom nodes with `NODE_CLASS_MAPPINGS` and frontend extensions through `WEB_DIRECTORY`.
+
+The node returns its preview images through a custom UI payload key instead of ComfyUI's built-in `images` key, so Nodes 2.0 does not render an extra native image gallery under the custom comparison view.
 
 ## License
 
