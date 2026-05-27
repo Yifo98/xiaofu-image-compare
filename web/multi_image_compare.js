@@ -8,6 +8,7 @@ const MIN_INPUTS = 2;
 const DEFAULT_NODE_WIDTH = 420;
 const DEFAULT_NODE_HEIGHT = 380;
 const DEFAULT_WIDGET_HEIGHT = 300;
+const WIDGET_TOP_ESTIMATE = 120;
 
 function slotName(index) {
   return `${SLOT_PREFIX}${String(index + 1).padStart(2, "0")}`;
@@ -376,8 +377,13 @@ class MultiImageCompareWidget {
     };
   }
 
+  getDesiredWidgetHeight() {
+    const nodeHeight = this.node?.size?.[1] || DEFAULT_NODE_HEIGHT;
+    return Math.max(DEFAULT_WIDGET_HEIGHT, nodeHeight - WIDGET_TOP_ESTIMATE);
+  }
+
   computeSize(width) {
-    return [width, DEFAULT_WIDGET_HEIGHT];
+    return [width, this.getDesiredWidgetHeight()];
   }
 
   draw(ctx, node, width, y, height) {
@@ -385,7 +391,7 @@ class MultiImageCompareWidget {
     this.last_y = y;
     this.hitAreas = [];
 
-    const widgetHeight = Math.max(height || DEFAULT_WIDGET_HEIGHT, node.size[1] - y - 8);
+    const widgetHeight = Math.max(height || 0, this.getDesiredWidgetHeight());
     const rowHeight = 24;
     const padding = 10;
     const selectorHeight = this.computeSelectorHeight(ctx, width - padding * 2, rowHeight);

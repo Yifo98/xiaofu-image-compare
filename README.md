@@ -12,6 +12,7 @@ A lightweight ComfyUI custom node for comparing multiple images in one preview n
 - Remove unused empty image input slots with `Clean`.
 - No extra Python dependencies.
 - Compatible with ComfyUI classic nodes and Nodes 2.0.
+- Resizable preview area in Nodes 2.0.
 
 ## Installation
 
