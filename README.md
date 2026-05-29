@@ -14,7 +14,8 @@ This plugin started as an image comparison node. It now includes a full video co
 - Hide or show items with `H` / `S`.
 - Add more `image_XX` inputs with `Add`.
 - Remove unused empty inputs with `Clean`.
-- Supports both classic ComfyUI nodes and Nodes 2.0.
+- Classic ComfyUI nodes are recommended for the most stable experience.
+- Nodes 2.0 is best-effort supported, but may have minor display or interaction compatibility issues depending on the ComfyUI frontend version.
 
 ![XiaoFu image comparison workflow](docs/images/image-compare-workflow.png)
 
@@ -110,8 +111,10 @@ The output labels include filename and size, so it is easier to match each port 
 ## Notes
 
 - The node category is shown as `🌟 XiaoFu`, so it is easy to find in the ComfyUI node menu.
+- Recommended: use the classic ComfyUI node interface when possible.
+- Nodes 2.0 can work, but it may have compatibility issues with widget layout, preview refresh, or interactions in some frontend versions. These issues do not affect the underlying workflow execution.
 - Classic nodes use a canvas widget.
-- Nodes 2.0 uses a dedicated DOM widget for stable buttons, sliders, and video playback.
+- Nodes 2.0 uses a dedicated DOM widget as a compatibility layer for buttons, sliders, and video playback.
 - Local video playback uses the browser video element and the original local file.
 - PyAV is optional for local playback, but helps read exact metadata such as FPS, duration, and dimensions.
 - If ComfyUI runs on a remote machine, the file picker and fallback browser operate on that machine's filesystem.
