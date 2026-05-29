@@ -574,28 +574,51 @@ def run_windows_video_picker(mode):
         raise RuntimeError("PowerShell is required to open the Windows file picker.")
 
     file_filter = "Video files (*.mp4;*.mov;*.mkv;*.webm;*.m4v)|*.mp4;*.mov;*.mkv;*.webm;*.m4v|All files (*.*)|*.*"
-    if mode == "folder":
-        script = """
+    dialog_prelude = """
 Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+[System.Windows.Forms.Application]::EnableVisualStyles()
+$owner = New-Object System.Windows.Forms.Form
+$owner.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen
+$owner.Size = New-Object System.Drawing.Size(1, 1)
+$owner.Opacity = 0
+$owner.ShowInTaskbar = $false
+$owner.TopMost = $true
+$owner.Show()
+$owner.Activate()
+$owner.BringToFront()
+"""
+    dialog_cleanup = """
+$owner.Close()
+$owner.Dispose()
+"""
+    if mode == "folder":
+        script = f"""
+{dialog_prelude}
 $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
 $dialog.Description = "Choose video folder"
-if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+if ($dialog.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) {{
   [Console]::WriteLine($dialog.SelectedPath)
-}
+}}
+$dialog.Dispose()
+{dialog_cleanup}
 """
     else:
         multiselect = "$true" if mode == "files" else "$false"
         script = f"""
-Add-Type -AssemblyName System.Windows.Forms
+{dialog_prelude}
 $dialog = New-Object System.Windows.Forms.OpenFileDialog
 $dialog.Title = "Choose video file"
 $dialog.Filter = "{file_filter}"
 $dialog.Multiselect = {multiselect}
-if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{
+if ($dialog.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) {{
   foreach ($file in $dialog.FileNames) {{
     [Console]::WriteLine($file)
   }}
 }}
+$dialog.Dispose()
+{dialog_cleanup}
 """
 
     result = subprocess.run(
@@ -603,6 +626,8 @@ if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{
         check=True,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
@@ -738,7 +763,10 @@ if PromptServer is not None and web is not None:
             return web.json_response({"success": False, "error": "Invalid picker mode."}, status=400)
 
         try:
-            paths = run_native_video_picker(mode)
+            import asyncio
+
+            loop = asyncio.get_running_loop()
+            paths = await loop.run_in_executor(None, run_native_video_picker, mode)
             return web.json_response({"success": True, "paths": paths})
         except Exception as error:
             return web.json_response({"success": False, "error": str(error)}, status=500)
