@@ -1,9 +1,11 @@
 [project]
-name = "xiaofu-image-compare"
-description = "A ComfyUI custom node for comparing multiple images with a slide divider."
-version = "0.2.0"
+name = "xiaofu-image-video-compare"
+description = "ComfyUI custom nodes for comparing images and local videos with an interactive split-view preview."
+version = "0.4.0"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+  "av>=12.0.0",
+]
 
 [project.urls]
 Repository = "https://github.com/Yifo98/xiaofu-image-compare"
