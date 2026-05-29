@@ -46,7 +46,7 @@ Clone this repository into your ComfyUI `custom_nodes` directory:
 
 ```bash
 cd ComfyUI/custom_nodes
-git clone https://github.com/Yifo98/xiaofu-image-compare.git
+git clone https://github.com/Yifo98/xiaoFu-Image-Video-Comparegit
 ```
 
 Then restart ComfyUI.
