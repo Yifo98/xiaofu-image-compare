@@ -80,6 +80,34 @@ The easiest workflow is to start from the folder loader:
 
 Important: after running the video workflow, the preview may stay black until playback starts. Press `Space` or click `Play` once to show the original-video preview.
 
+## Visual Walkthrough
+
+The screenshots below show a practical setup flow inside ComfyUI. The annotations are in Chinese because they are intended as quick hands-on guidance.
+
+### Add the Image Compare Node
+
+Right-click the canvas, open `🌟 XiaoFu/Image`, then add `🌟 XiaoFu Multi Image Compare`.
+
+![Add XiaoFu image compare node](docs/images/tutorial-image-menu.png)
+
+Connect `Load Image` outputs to the compare node. The node adds image inputs as needed; after changing inputs or materials, run the workflow again.
+
+![Connect image inputs and run workflow](docs/images/tutorial-image-connect-run.png)
+
+### Add the Video Compare Nodes
+
+Right-click the canvas, open `🌟 XiaoFu/Video`, then use `🌟 XiaoFu Load Video Folder` for the easiest local-video workflow.
+
+![Add XiaoFu video nodes](docs/images/tutorial-video-menu.png)
+
+Click `Create + Link Compare` to create a `🌟 XiaoFu Multi Video Compare` node and add one starter connection automatically.
+
+![Create and link video compare node](docs/images/tutorial-video-create-link.png)
+
+Choose one video, multiple videos, or a folder depending on your source count. After running the workflow, press `Space` or click `Play` to show the video preview. `Clear Links` removes outgoing loader links without clearing the selected sources.
+
+![Choose videos, run workflow, and play preview](docs/images/tutorial-video-select-run-play.png)
+
 ## Large Local Videos
 
 For large videos, use `🌟 XiaoFu Load Video Folder` instead of browser upload nodes.
