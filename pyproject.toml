@@ -8,7 +8,7 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/Yifo98/xiaofu-image-compare"
+Repository = "https://github.com/Yifo98/XiaoFu-Image-Video-Compare"
 
 [tool.comfy]
 web = "web"
